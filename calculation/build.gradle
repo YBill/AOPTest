@@ -1,0 +1,29 @@
+apply plugin: 'java-library'
+apply plugin: 'maven-publish'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            publish2Local(MavenPublication) {
+                groupId = "com.bill.calculate"
+                artifactId = "calculation"
+                version = "1.0.0"
+
+                from components.java
+
+            }
+
+        }
+
+        repositories {
+            maven {
+                url = "./repo" // 生成到当前module下
+            }
+        }
+    }
+}

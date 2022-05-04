@@ -1,0 +1,3 @@
+rootProject.name = "AOPTest"
+include ':app'
+include ':calculation'
