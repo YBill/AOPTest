@@ -1,7 +1,5 @@
 apply plugin: 'com.android.application'
 
-apply plugin: 'com.bill.plugin'
-
 android {
     compileSdkVersion 30
     buildToolsVersion "30.0.2"
