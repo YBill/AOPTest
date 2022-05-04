@@ -97,6 +97,7 @@ class InjectUtil {
     public static byte[] checkJarMethodParamsNull(String jarFilePath) throws NotFoundException, IOException, CannotCompileException {
         ClassPool classPool = ClassPool.getDefault();
 
+        // 导入jar包，要不找不到Calculation类
         classPool.appendClassPath(jarFilePath);
 
         CtClass ctClass = classPool.getCtClass("com.bill.calculation.Calculation");
