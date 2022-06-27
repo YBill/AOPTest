@@ -44,13 +44,13 @@ class InjectUtil {
             return;
         }
 
-        addToast(androidSDKPath, originalPath, filePath);
+        addLog(androidSDKPath, originalPath, filePath);
     }
 
     /**
-     * 使用Javassist操作Class字节码，在所有Activity的onCreate方法中插入Toast
+     * 使用ASM操作Class字节码，在所有Activity的onCreate方法中插入Log输入执行时间
      */
-    private static void addToast(String androidSDKPath, String originalPath, String filePath) {
+    private static void addLog(String androidSDKPath, String originalPath, String filePath) {
         System.out.println("==== filePath = " + filePath);
 
         try {
