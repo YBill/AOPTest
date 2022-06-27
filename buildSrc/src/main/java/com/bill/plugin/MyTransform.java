@@ -11,20 +11,12 @@ import com.android.build.api.transform.TransformInvocation;
 import com.android.build.gradle.internal.pipeline.TransformManager;
 import com.android.utils.FileUtils;
 
-import org.apache.commons.io.IOUtils;
 import org.gradle.api.Project;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Collection;
-import java.util.Enumeration;
 import java.util.Set;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
-import java.util.zip.ZipEntry;
 
 /**
  * Created by Bill on 2022/5/3.
@@ -110,45 +102,7 @@ class MyTransform extends Transform {
             File contentLocation = transformInvocation.getOutputProvider().getContentLocation(jarInput.getName(),
                     jarInput.getContentTypes(), jarInput.getScopes(), Format.JAR);
             try {
-                // 匹配要修复的jar包
-                if (absolutePath.endsWith("calculation-1.0.0.jar")) {
-                    // 原始的jar包
-                    JarFile jarFile = new JarFile(absolutePath);
-                    // 处理后的jar包路径
-                    String tmpJarFilePath = jarInput.getFile().getParent() + File.separator + jarInput.getFile().getName() + "_tmp.jar";
-                    File tmpJarFile = new File(tmpJarFilePath);
-                    JarOutputStream jos = new JarOutputStream(new FileOutputStream(tmpJarFile));
-                    System.out.println("---- origin jar file path: " + jarInput.getFile().getAbsolutePath());
-                    System.out.println("---- tmp jar file path: " + tmpJarFilePath);
-                    Enumeration<JarEntry> entries = jarFile.entries();
-                    // 遍历jar包中的文件，找到需要修改的class文件
-                    while (entries.hasMoreElements()) {
-                        JarEntry jarEntry = entries.nextElement();
-                        String name = jarEntry.getName();
-                        jos.putNextEntry(new ZipEntry(name));
-                        InputStream is = jarFile.getInputStream(jarEntry);
-                        // 匹配到有问题的class文件
-                        if ("com/bill/calculation/Calculation.class".equals(name)) {
-                            // 处理有问题的class文件并将新的数据写入到新jar包中
-                            jos.write(InjectUtil.checkJarMethodParamsNull(absolutePath));
-                        } else {
-                            // 没有问题的直接写入到新的jar包中
-                            jos.write(IOUtils.toByteArray(is));
-                        }
-                        jos.closeEntry();
-                    }
-                    // 关闭IO流
-                    jos.close();
-                    jarFile.close();
-                    // 拷贝新的Jar文件
-                    System.out.println("---- copy to dest: " + contentLocation.getAbsolutePath());
-                    FileUtils.copyFile(tmpJarFile, contentLocation);
-                    // 删除临时文件
-                    System.out.println("---- tmpJarFile: " + tmpJarFile.getAbsolutePath());
-                    tmpJarFile.delete();
-                } else {
-                    FileUtils.copyFile(jarInput.getFile(), contentLocation);
-                }
+                FileUtils.copyFile(jarInput.getFile(), contentLocation);
             } catch (Exception e) {
                 e.printStackTrace();
             }

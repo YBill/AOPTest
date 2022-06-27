@@ -3,20 +3,13 @@ package com.bill.plugin;
 import com.android.build.gradle.AppExtension;
 
 import org.gradle.api.Project;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.Locale;
-
-import javassist.CannotCompileException;
-import javassist.ClassPool;
-import javassist.CtClass;
-import javassist.CtMethod;
-import javassist.Modifier;
-import javassist.NotFoundException;
-import javassist.bytecode.CodeAttribute;
-import javassist.bytecode.LocalVariableAttribute;
-import javassist.bytecode.MethodInfo;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 
 /**
  * Created by Bill on 2022/5/4.
@@ -61,90 +54,33 @@ class InjectUtil {
         System.out.println("==== filePath = " + filePath);
 
         try {
-            ClassPool classPool = new ClassPool();
-
-            classPool.appendClassPath(androidSDKPath); // 导入 android.jar
-            classPool.appendClassPath(originalPath); // 导入当前类的路径，要不找不到，比如MainActivity
-            classPool.importPackage("android.widget.Toast"); // 导入包
-
             if (filePath.contains("MainActivity")) {
-                CtClass ctClass = classPool.getCtClass("com.bill.aoptest.MainActivity");
-                if (ctClass.isFrozen()) {
-                    ctClass.defrost();
-                }
-                // 获取Activity中的onCreate方法
-                CtMethod onCreate = ctClass.getDeclaredMethod("onCreate");
-                // 要插入的代码，Toast内容为当前类名
-                String insertCode = String.format(Locale.getDefault(),
-                        "Toast.makeText(this, \"%s\", Toast.LENGTH_SHORT).show();",
-                        getSimpleClassName(filePath));
-                System.out.println("==== insertCode：" + insertCode);
-                // 在onCreate方法结尾处插入上面的Toast代码
-                onCreate.insertAfter(insertCode);
-                // 写回原来的目录下，覆盖原来的class文件
-                ctClass.writeFile(originalPath);
-                ctClass.detach();
+                // 要操作的class源文件，这里换成你本机的路径
+                final String originClzPath = filePath;
+                FileInputStream fis = new FileInputStream(originClzPath);
+                // ClassReader是ASM提供的读取字节码的工具
+                ClassReader classReader = new ClassReader(fis);
+                // ClassWriter是ASM提供的写入字节码的工具
+                ClassWriter classWriter = new ClassWriter(classReader, ClassWriter.COMPUTE_MAXS);
+                // 自定义类访问器，在其中完成对某个方法的字节码操作
+                MyClassVisitor myClassVisitor = new MyClassVisitor(Opcodes.ASM5, classWriter);
+                // 调用ClassReader的accept方法开始处理字节码
+                classReader.accept(myClassVisitor, ClassReader.EXPAND_FRAMES);
+                // 操作后的class文件写入到这个文件中，也可以自定义一个文件对比看结果
+                String destPath = filePath;
+                // 通过ClassWriter拿到处理后的字节码对应的字节数组
+                byte[] bytes = classWriter.toByteArray();
+                FileOutputStream fos = new FileOutputStream(destPath);
+                // 写文件
+                fos.write(bytes);
+                // 关闭文件流
+                fos.close();
+                fis.close();
             }
-
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-
-    /**
-     * 方法中添加判空逻辑
-     */
-    public static byte[] checkJarMethodParamsNull(String jarFilePath) throws NotFoundException, IOException, CannotCompileException {
-        ClassPool classPool = ClassPool.getDefault();
-
-        // 导入jar包，要不找不到Calculation类
-        classPool.appendClassPath(jarFilePath);
-
-        CtClass ctClass = classPool.getCtClass("com.bill.calculation.Calculation");
-        if (ctClass.isFrozen()) {
-            ctClass.defrost();
-        }
-
-        CtMethod getLengthMethod = ctClass.getDeclaredMethod("getLength");
-
-        String[] args = getMethodVariableName(getLengthMethod);
-
-        String insertCode = String.format(Locale.getDefault(),
-                "if(%s==null)return 0;",
-                args[0]);
-        System.out.println("---- insertCode：" + insertCode);
-
-        getLengthMethod.insertBefore(insertCode);
-
-        byte[] bytes = ctClass.toBytecode();
-        ctClass.detach();
-
-        return bytes;
-
-    }
-
-    /**
-     * 获取方法的参数名
-     */
-    public static String[] getMethodVariableName(CtMethod cm) {
-        try {
-            MethodInfo methodInfo = cm.getMethodInfo();
-            CodeAttribute codeAttribute = methodInfo.getCodeAttribute();
-            String[] paramNames = new String[cm.getParameterTypes().length];
-            LocalVariableAttribute attr = (LocalVariableAttribute) codeAttribute.getAttribute(LocalVariableAttribute.tag);
-            if (attr != null) {
-                int pos = Modifier.isStatic(cm.getModifiers()) ? 0 : 1;
-                for (int i = 0; i < paramNames.length; i++) {
-                    paramNames[i] = attr.variableName(i + pos);
-                }
-                return paramNames;
-            }
-        } catch (Exception e) {
-            System.out.println("---- getMethodVariableName fail " + e);
-        }
-        return null;
-    }
-
 
     /**
      * 获取类名，如：MainActivity
