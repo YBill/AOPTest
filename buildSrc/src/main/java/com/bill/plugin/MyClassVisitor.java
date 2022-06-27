@@ -7,7 +7,7 @@ import org.objectweb.asm.Opcodes;
 /**
  * author ywb
  * date 2022/6/21
- * desc
+ * desc ClassVisitor处理类访问的逻辑
  */
 public class MyClassVisitor extends ClassVisitor {
 
@@ -16,6 +16,7 @@ public class MyClassVisitor extends ClassVisitor {
     }
 
     public MyClassVisitor(int api, ClassVisitor classVisitor) {
+        // api：ASM API版本，源码规定只能为4，5，6
         super(api, classVisitor);
     }
 
@@ -28,7 +29,7 @@ public class MyClassVisitor extends ClassVisitor {
 
     @Override
     public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
-        // 访问类中的方法时会调用visitMethod
+        // 访问类中的方法时会调用
         // ==== visitMethod: name = <init> // 代表构造方法
         System.out.println("==== visitMethod: name = " + name);
         if ("onCreate".equals(name)) {
@@ -36,5 +37,12 @@ public class MyClassVisitor extends ClassVisitor {
             return new MyAdviceAdapter(Opcodes.ASM5, methodVisitor, access, name, descriptor);
         }
         return super.visitMethod(access, name, descriptor, signature, exceptions);
+    }
+
+    @Override
+    public void visitEnd() {
+        super.visitEnd();
+        // 访问类结束调用
+        System.out.println("==== visitEnd");
     }
 }

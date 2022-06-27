@@ -8,7 +8,7 @@ import org.objectweb.asm.commons.AdviceAdapter;
 /**
  * author ywb
  * date 2022/6/21
- * desc
+ * desc MethodVisitor子类，处理具体方法的逻辑
  */
 public class MyAdviceAdapter extends AdviceAdapter {
 
@@ -37,8 +37,10 @@ public class MyAdviceAdapter extends AdviceAdapter {
     /**
      * 这个方法的目的是在onCreate方法结束的地方插入如下代码：
      * long end = System.currentTimeMillis();
-     * long delta = end - start;
-     * System.out.println("execute onCreate() use time: " + delta);
+     * long x = end - start;
+     * System.out.println("execute onCreate() use time: " + x);
+     * 或
+     * Log.e("Bill", "execute onCreate() use time: " + x);
      */
     @Override
     protected void onMethodExit(int opcode) {
