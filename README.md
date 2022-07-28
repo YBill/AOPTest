@@ -5,7 +5,7 @@
 - Android 项目语言：Java
 - 生成 Gradle 插件方式：buildSrc
 - Gradle 插件语言：Java
-- 插桩工具：Javassist
+- 插桩工具：ASM
 - 插桩中定位代码方式：通过包名+类名定位（写死的不灵活）
 
 下面例子完成了字节码插桩，注意完成了以下两个功能：
