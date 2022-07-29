@@ -10,43 +10,12 @@
 
 下面例子完成了字节码插桩，注意完成了以下两个功能：
 
-- 修改第三方 jar 中的内容
-- 在 Activity 的 onCreate 方法中插入 Toast
+- 在 Activity 的 onCreate 方法中插入计算方法执行耗时并输出Log
+- 在 Activity 的 onResume 方法中 Toast
 
-#### 修改第三方 jar 中的内容的例子
+##### 0-1、创建 buildSrc 插件，并配置好插件
 
-有一个 jar，里面就一个类，一个方法，获取字符串长度，内容如下，但是方法没有判空，str 为空时会崩溃，下面通过字节码插桩添加判空逻辑：
-
-```
-public class Calculation {
-
-    public static int getLength(String str) {
-        return str.length();
-    }
-
-}
-```
-
-生成 jar 的方式很多，本例子中通过 calculation 这个 module，通过上传本地 Maven 的方式生成 jar，生成到当前 Module 下的 repo目录下，然后就这个 Module 就没用了，将生成的 jar 拷贝到 app 的 libs 下，并在 gradle 中添加依赖
-
-##### 1、新建 Android 项目，然后在 MainActivity 中添加一个 Button，点击后调用 jar 包中的代码
-
-```
-    public void handleShowLength(View view) {
-        String str = null;
-
-        // 这个方法里要插入判空代码，防止崩溃
-        int length = Calculation.getLength(str);
-
-        Toast.makeText(getApplicationContext(), String.valueOf(length), Toast.LENGTH_SHORT).show();
-
-    }
-```
-
-
-##### 2、创建 buildSrc 插件，并配置好插件
-
-##### 3、创建 Transform 类，这里名为 MyTransform，主要代码如下：
+##### 0-2、创建 Transform 类，这里名为 MyTransform，主要代码如下：
 
 ```
     @Override
@@ -75,109 +44,25 @@ public class Calculation {
 ```
 
 ```
-    // 处理输入的Jar包
-    private void handleJarInputs(TransformInvocation transformInvocation, Collection<JarInput> jarInputs) {
-        for (JarInput jarInput : jarInputs) {
-            String absolutePath = jarInput.getFile().getAbsolutePath();
-            System.out.println(">>>> jar input file path: " + absolutePath);
-            File contentLocation = transformInvocation.getOutputProvider().getContentLocation(jarInput.getName(),
-                    jarInput.getContentTypes(), jarInput.getScopes(), Format.JAR);
-            try {
-                // 匹配要修复的jar包
-                if (absolutePath.endsWith("calculation-1.0.0.jar")) {
-                    // 原始的jar包
-                    JarFile jarFile = new JarFile(absolutePath);
-                    // 处理后的jar包路径
-                    String tmpJarFilePath = jarInput.getFile().getParent() + File.separator + jarInput.getFile().getName() + "_tmp.jar";
-                    File tmpJarFile = new File(tmpJarFilePath);
-                    JarOutputStream jos = new JarOutputStream(new FileOutputStream(tmpJarFile));
-                    System.out.println("---- origin jar file path: " + jarInput.getFile().getAbsolutePath());
-                    System.out.println("---- tmp jar file path: " + tmpJarFilePath);
-                    Enumeration<JarEntry> entries = jarFile.entries();
-                    // 遍历jar包中的文件，找到需要修改的class文件
-                    while (entries.hasMoreElements()) {
-                        JarEntry jarEntry = entries.nextElement();
-                        String name = jarEntry.getName();
-                        jos.putNextEntry(new ZipEntry(name));
-                        InputStream is = jarFile.getInputStream(jarEntry);
-                        // 匹配到有问题的class文件
-                        if ("com/bill/calculation/Calculation.class".equals(name)) {
-                            // 处理有问题的class文件并将新的数据写入到新jar包中
-                            jos.write(InjectUtil.checkJarMethodParamsNull(absolutePath));
-                        } else {
-                            // 没有问题的直接写入到新的jar包中
-                            jos.write(IOUtils.toByteArray(is));
-                        }
-                        jos.closeEntry();
-                    }
-                    // 关闭IO流
-                    jos.close();
-                    jarFile.close();
-                    // 拷贝新的Jar文件
-                    System.out.println("---- copy to dest: " + contentLocation.getAbsolutePath());
-                    FileUtils.copyFile(tmpJarFile, contentLocation);
-                    // 删除临时文件
-                    System.out.println("---- tmpJarFile: " + tmpJarFile.getAbsolutePath());
-                    tmpJarFile.delete();
-                } else {
+        // Jar包不处理
+        private void handleJarInputs(TransformInvocation transformInvocation, Collection<JarInput> jarInputs) {
+            for (JarInput jarInput : jarInputs) {
+                String absolutePath = jarInput.getFile().getAbsolutePath();
+                System.out.println(">>>> jar input file path: " + absolutePath);
+                File contentLocation = transformInvocation.getOutputProvider().getContentLocation(jarInput.getName(),
+                        jarInput.getContentTypes(), jarInput.getScopes(), Format.JAR);
+                try {
                     FileUtils.copyFile(jarInput.getFile(), contentLocation);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
         }
-    }
 ```
 
-```
-    public static byte[] checkJarMethodParamsNull(String jarFilePath) throws NotFoundException, IOException, CannotCompileException {
-        ClassPool classPool = ClassPool.getDefault();
+#### 在 Activity 的 onCreate 方法中插入 Log
 
-        // 导入jar包，要不找不到Calculation类
-        classPool.appendClassPath(jarFilePath);
-
-        CtClass ctClass = classPool.getCtClass("com.bill.calculation.Calculation");
-        if (ctClass.isFrozen()) {
-            ctClass.defrost();
-        }
-
-        CtMethod getLengthMethod = ctClass.getDeclaredMethod("getLength");
-
-        // 获取参数名称
-        String[] args = getMethodVariableName(getLengthMethod);
-
-        String insertCode = String.format(Locale.getDefault(),
-                "if(%s==null)return 0;",
-                args[0]);
-        System.out.println("---- insertCode：" + insertCode);
-
-        getLengthMethod.insertBefore(insertCode);
-
-        byte[] bytes = ctClass.toBytecode();
-        ctClass.detach();
-
-        return bytes;
-
-    }
-```
-
-##### 通过上面的步骤就编写完成，点击就可以运行了，点击 Button 可以正常 Toast，没有崩溃，说明我们判空逻辑成功了，反编译代码查看：
-
-```
-// from jadx
-public class Calculation {
-    public static int getLength(String str) {
-        if (str == null) {
-            return 0;
-        }
-        return str.length();
-    }
-}
-```
-
-#### 在 Activity 的 onCreate 方法中插入 Toast
-
-##### 1、接着上面的例子，主要看第三步代码：
+##### 1、处理输入的目录：
 
 ```
     // 处理输入的目录
@@ -186,7 +71,7 @@ public class Calculation {
             String absolutePath = directoryInput.getFile().getAbsolutePath();
             System.out.println(">>>> directory input file path: " + absolutePath);
             // 处理class文件
-            InjectUtil.inject(mProject, absolutePath);
+            InjectUtil.inject(absolutePath);
             // 获取目标地址
             File contentLocation = transformInvocation.getOutputProvider().getContentLocation(directoryInput.getName(),
                     directoryInput.getContentTypes(), directoryInput.getScopes(), Format.DIRECTORY);
@@ -201,82 +86,244 @@ public class Calculation {
 ```
 
 ```
-    public static void inject(Project project, String dirPath) {
-        System.out.println("==== Android SDK Path : " + getAndroidSDKPath(project));
-        realInject(getAndroidSDKPath(project), dirPath, dirPath);
-    }
-
-    /**
-     * 遍历目录，是文件则调用doInjection注入，是目录则递归调用inject方法
-     */
-    private static void realInject(String androidSDKPath, String originalPath, String dirPath) {
-        File f = new File(dirPath);
-        if (f.isDirectory()) {
-            File[] files = f.listFiles();
-            for (File file : files) {
-                realInject(androidSDKPath, originalPath, file.getAbsolutePath());
-            }
-        } else {
-            doInjection(androidSDKPath, originalPath, dirPath);
-        }
-    }
-
-    private static void doInjection(String androidSDKPath, String originalPath, String filePath) {
-        if (filePath == null || filePath.length() == 0
-                || filePath.trim().length() == 0
-                || !filePath.endsWith(".class")) {
-            return;
+        public static void inject(String dirPath) {
+            realInject(dirPath);
         }
 
-        addToast(androidSDKPath, originalPath, filePath);
-    }
-
-    /**
-     * 使用Javassist操作Class字节码，在所有Activity的onCreate方法中插入Toast
-     */
-    private static void addToast(String androidSDKPath, String originalPath, String filePath) {
-        System.out.println("==== filePath = " + filePath);
-
-        try {
-            ClassPool classPool = new ClassPool();
-
-            classPool.appendClassPath(androidSDKPath); // 导入 android.jar
-            classPool.appendClassPath(originalPath); // 导入当前类的路径，要不找不到，比如MainActivity
-            classPool.importPackage("android.widget.Toast"); // 导入包
-
-            if (filePath.contains("MainActivity")) {
-                CtClass ctClass = classPool.getCtClass("com.bill.aoptest.MainActivity");
-                if (ctClass.isFrozen()) {
-                    ctClass.defrost();
+        /**
+         * 遍历目录，是文件则调用doInjection注入，是目录则递归调用inject方法
+         */
+        private static void realInject(String dirPath) {
+            File f = new File(dirPath);
+            if (f.isDirectory()) {
+                File[] files = f.listFiles();
+                for (File file : files) {
+                    realInject(file.getAbsolutePath());
                 }
-                // 获取Activity中的onCreate方法
-                CtMethod onCreate = ctClass.getDeclaredMethod("onCreate");
-                // 要插入的代码，Toast内容为当前类名
-                String insertCode = String.format(Locale.getDefault(),
-                        "Toast.makeText(this, \"%s\", Toast.LENGTH_SHORT).show();",
-                        getSimpleClassName(filePath));
-                System.out.println("==== insertCode：" + insertCode);
-                // 在onCreate方法结尾处插入上面的Toast代码
-                onCreate.insertAfter(insertCode);
-                // 写回原来的目录下，覆盖原来的class文件
-                ctClass.writeFile(originalPath);
-                ctClass.detach();
+            } else {
+                doInjection(dirPath);
+            }
+        }
+
+        private static void doInjection(String filePath) {
+            if (filePath == null || filePath.length() == 0
+                    || filePath.trim().length() == 0
+                    || !filePath.endsWith(".class")) {
+                return;
             }
 
-        } catch (Exception e) {
-            e.printStackTrace();
+            addLog(filePath);
         }
+
+        private static void addLog(String filePath) {
+            System.out.println("==== filePath = " + filePath);
+
+            try {
+                if (filePath.contains("MainActivity")) {
+                    // 要操作的class源文件，这里换成你本机的路径
+                    final String originClzPath = filePath;
+                    FileInputStream fis = new FileInputStream(originClzPath);
+                    // ClassReader是ASM提供的读取字节码的工具
+                    ClassReader classReader = new ClassReader(fis);
+                    // ClassWriter是ASM提供的写入字节码的工具
+                    ClassWriter classWriter = new ClassWriter(classReader, ClassWriter.COMPUTE_MAXS);
+                    // 自定义类访问器，在其中完成对某个方法的字节码操作
+                    MyClassVisitor myClassVisitor = new MyClassVisitor(Opcodes.ASM5, classWriter);
+                    // 调用ClassReader的accept方法开始处理字节码
+                    classReader.accept(myClassVisitor, ClassReader.EXPAND_FRAMES);
+                    // 操作后的class文件写入到这个文件中，也可以自定义一个文件对比看结果
+                    String destPath = filePath;
+                    // 通过ClassWriter拿到处理后的字节码对应的字节数组
+                    byte[] bytes = classWriter.toByteArray();
+                    FileOutputStream fos = new FileOutputStream(destPath);
+                    // 写文件
+                    fos.write(bytes);
+                    // 关闭文件流
+                    fos.close();
+                    fis.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+```
+##### 2、创建ClassVisitor类处理类：
+
+```
+public class MyClassVisitor extends ClassVisitor {
+
+    private String mClassName;
+
+    public MyClassVisitor(int api) {
+        super(api);
     }
+
+    public MyClassVisitor(int api, ClassVisitor classVisitor) {
+        // api：ASM API版本，源码规定只能为4，5，6
+        super(api, classVisitor);
+    }
+
+    @Override
+    public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+        super.visit(version, access, name, signature, superName, interfaces);
+        this.mClassName = name;
+        // 访问类时会调用该方法
+        System.out.println("==== ClassVisitor visit --> className = " + name);
+    }
+
+    @Override
+    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+        // 访问类中的方法时会调用
+        // ==== visitMethod: name = <init> // 代表构造方法
+        System.out.println("==== ClassVisitor visitMethod ---> methodName = " + name);
+        // 下面分别在onCreate和onResume中插入代码，分别使用了继承MyMethodVisitor和AdviceAdapter(继承MyMethodVisitor)来处理
+        // 推荐使用继承AdviceAdapter处理
+        if ("onCreate".equals(name)) {
+            MethodVisitor methodVisitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            return new MyAdviceAdapter(Opcodes.ASM5, methodVisitor, access, name, descriptor);
+        } else if ("onResume".equals(name)) {
+            MethodVisitor methodVisitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            return new MyMethodVisitor(Opcodes.ASM5, methodVisitor, mClassName);
+        }
+        return super.visitMethod(access, name, descriptor, signature, exceptions);
+    }
+
+    @Override
+    public void visitEnd() {
+        super.visitEnd();
+        // 访问类结束调用
+        System.out.println("==== ClassVisitor visitEnd");
+    }
+}
 ```
 
-##### 点击 Run 跑起来进入项目就 Toast 了，说明我们在 MainActivity 中插入 Toast 成功了，反编译代码查看：
+##### 2、创建MethodVisitor类处理方法：
+
+这里分别创建了继承 MethodVisitor 和 AdviceAdapter 分别处理 插入日志和Toast，推荐使用继承AdviceAdapter处理
+
+```
+public class MyAdviceAdapter extends AdviceAdapter {
+
+    private int startTimeId;
+
+    protected MyAdviceAdapter(int api, MethodVisitor methodVisitor, int access, String name, String descriptor) {
+        super(api, methodVisitor, access, name, descriptor);
+    }
+
+    /**
+     * 这个方法的目的是为了在onCreate方法开始处插入如下代码：
+     * long v = System.currentTimeMillis();
+     */
+    @Override
+    protected void onMethodEnter() {
+        super.onMethodEnter();
+        System.out.println("==== AdviceAdapter onMethodEnter");
+        // 在方法开始处调用
+        // 创建一个long类型的本地变量
+        startTimeId = newLocal(Type.LONG_TYPE);
+        // 调用System.currentTimeMillis()方法
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/System", "currentTimeMillis", "()J", false);
+        // 将上一步中的结果保存到startTimeId指向的long类型变量中（不是保存到startTimeId）
+        mv.visitIntInsn(LSTORE, startTimeId);
+    }
+
+    /**
+     * 这个方法的目的是在onCreate方法结束的地方插入如下代码：
+     * long end = System.currentTimeMillis();
+     * long x = end - start;
+     * System.out.println("execute onCreate() use time: " + x);
+     * 或
+     * Log.e("Bill", "execute onCreate() use time: " + x);
+     */
+    @Override
+    protected void onMethodExit(int opcode) {
+        super.onMethodExit(opcode);
+        System.out.println("==== AdviceAdapter onMethodExit");
+        // 在方法结束时调用
+        // 创建一个long类型的本地变量
+        int endTimeId = newLocal(Type.LONG_TYPE);
+        // 调用System.currentTimeMillis()方法
+        mv.visitMethodInsn(INVOKESTATIC, "java/lang/System", "currentTimeMillis", "()J", false);
+        // 将上一步中的结果保存到endTimeId指向的long类型变量中（不是保存到endTimeId）
+        mv.visitIntInsn(LSTORE, endTimeId);
+        // 创建一个long类型的本地变量，deltaTimeId为这个变量的ID
+        int deltaTimeId = newLocal(Type.LONG_TYPE);
+        // 加载endTimeId指向的long类型的变量
+        mv.visitIntInsn(LLOAD, endTimeId);
+        // 加载startTimeId指向的long类型变量
+        mv.visitIntInsn(LLOAD, startTimeId);
+        // 将上面两个变量做减法（endTimeIdVal - startTimeIdVal）
+        mv.visitInsn(LSUB);
+        // 将减法的结果存在deltaTimeId指向的变量中
+        mv.visitIntInsn(LSTORE, deltaTimeId);
+
+        // 1、使用System.out.println()输出
+        /*// 调用System静态方法out
+        mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");*/
+
+        // 2、使用Log.x输出
+        // Log的第一个参数，也就是tag
+        mv.visitLdcInsn("Bill");
+
+        // 这个是拼接字符串，作为使用System.out.println()的第一个参数或使用Log.x的第二个参数
+        // 创建StringBuilder对象
+        mv.visitTypeInsn(NEW, "java/lang/StringBuilder");
+        // 复制栈顶数值并将复制值压入栈顶
+        mv.visitInsn(DUP);
+        // 调用StringBuilder构造方法初始化
+        mv.visitMethodInsn(INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "()V", false);
+        // 将字符串推到栈顶
+        mv.visitLdcInsn("execute onCreate() use time: ");
+        // 调用StringBuilder的append方法
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
+        // 加载deltaTimeId指向的long类型数据
+        mv.visitVarInsn(LLOAD, deltaTimeId);
+        // 调用StringBuilder的append方法
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "append", "(J)Ljava/lang/StringBuilder;", false);
+        // 调用StringBuilder的toString方法
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/StringBuilder", "toString", "()Ljava/lang/String;", false);
+
+//        mv.visitLdcInsn("Hello"); // Log的第二个参数
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "android/util/Log", "e", "(Ljava/lang/String;Ljava/lang/String;)I", false);
+        mv.visitInsn(Opcodes.POP);
+
+        /*// 调用System.out的println方法
+        mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);*/
+    }
+
+    @Override
+    public void visitMaxs(int maxStack, int maxLocals) {
+        System.out.println("==== AdviceAdapter visitMaxs ---> maxStack = " + maxStack + ", maxLocals = " + maxLocals);
+        super.visitMaxs(maxStack, maxLocals);
+    }
+}
+```
+
+##### 点击 Run 跑起来进入项目可以看到在 onCreate 和 onResume 中插入的代码了，反编译代码查看：
 
 ```
     // from jadx
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        this.setContentView(2131361820);
-        Object var3 = null;
-        Toast.makeText(this, "MainActivity", 0).show();
+    public class MainActivity extends AppCompatActivity {
+        public MainActivity() {
+        }
+
+        protected void onCreate(Bundle savedInstanceState) {
+            long var2 = System.currentTimeMillis();
+            super.onCreate(savedInstanceState);
+            this.setContentView(2131361820);
+            long var4 = System.currentTimeMillis();
+            long var6 = var4 - var2;
+            Log.e("Bill", "execute onCreate() use time: " + var6);
+        }
+
+        protected void onResume() {
+            super.onResume();
+            Toast.makeText(this.getApplicationContext(), "Hello", 0).show();
+        }
     }
 ```
+
+##### 编写 ASM 代码：
+
+可以先在一个类中写入要实现的功能，然后编译生成 class 文件（在build/intermediates/javac/debug/classes/包名/类名），然后通过 ASM Bytecode Viewer 插件查看，
+然后将 ASM 代码拷贝即可
