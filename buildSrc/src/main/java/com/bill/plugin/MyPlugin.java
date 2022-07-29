@@ -17,7 +17,7 @@ class MyPlugin implements Plugin<Project> {
 
         AppExtension extension = target.getExtensions().findByType(AppExtension.class);
         if (extension != null) {
-            extension.registerTransform(new MyTransform(target));
+            extension.registerTransform(new MyTransform());
         }
 
     }

@@ -11,8 +11,6 @@ import com.android.build.api.transform.TransformInvocation;
 import com.android.build.gradle.internal.pipeline.TransformManager;
 import com.android.utils.FileUtils;
 
-import org.gradle.api.Project;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
@@ -24,10 +22,8 @@ import java.util.Set;
 
 class MyTransform extends Transform {
 
-    private final Project mProject;
+    public MyTransform() {
 
-    public MyTransform(Project project) {
-        mProject = project;
     }
 
     @Override
@@ -91,7 +87,7 @@ class MyTransform extends Transform {
             String absolutePath = directoryInput.getFile().getAbsolutePath();
             System.out.println(">>>> directory input file path: " + absolutePath);
             // 处理class文件
-            InjectUtil.inject(mProject, absolutePath);
+            InjectUtil.inject(absolutePath);
             // 获取目标地址
             File contentLocation = transformInvocation.getOutputProvider().getContentLocation(directoryInput.getName(),
                     directoryInput.getContentTypes(), directoryInput.getScopes(), Format.DIRECTORY);

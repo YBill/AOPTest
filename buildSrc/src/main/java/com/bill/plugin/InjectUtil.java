@@ -1,8 +1,5 @@
 package com.bill.plugin;
 
-import com.android.build.gradle.AppExtension;
-
-import org.gradle.api.Project;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
@@ -17,40 +14,39 @@ import java.io.FileOutputStream;
 
 class InjectUtil {
 
-    public static void inject(Project project, String dirPath) {
-        System.out.println("==== Android SDK Path : " + getAndroidSDKPath(project));
-        realInject(getAndroidSDKPath(project), dirPath, dirPath);
+    public static void inject(String dirPath) {
+        realInject(dirPath);
     }
 
     /**
      * 遍历目录，是文件则调用doInjection注入，是目录则递归调用inject方法
      */
-    private static void realInject(String androidSDKPath, String originalPath, String dirPath) {
+    private static void realInject(String dirPath) {
         File f = new File(dirPath);
         if (f.isDirectory()) {
             File[] files = f.listFiles();
             for (File file : files) {
-                realInject(androidSDKPath, originalPath, file.getAbsolutePath());
+                realInject(file.getAbsolutePath());
             }
         } else {
-            doInjection(androidSDKPath, originalPath, dirPath);
+            doInjection(dirPath);
         }
     }
 
-    private static void doInjection(String androidSDKPath, String originalPath, String filePath) {
+    private static void doInjection(String filePath) {
         if (filePath == null || filePath.length() == 0
                 || filePath.trim().length() == 0
                 || !filePath.endsWith(".class")) {
             return;
         }
 
-        addLog(androidSDKPath, originalPath, filePath);
+        addLog(filePath);
     }
 
     /**
      * 使用ASM操作Class字节码，在所有Activity的onCreate方法中插入Log输入执行时间
      */
-    private static void addLog(String androidSDKPath, String originalPath, String filePath) {
+    private static void addLog(String filePath) {
         System.out.println("==== filePath = " + filePath);
 
         try {
@@ -80,24 +76,6 @@ class InjectUtil {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    /**
-     * 获取类名，如：MainActivity
-     */
-    private static String getSimpleClassName(String filePath) {
-        return filePath.substring(filePath.lastIndexOf("/") + 1).replace(".class", "");
-    }
-
-    /**
-     * 获取 android.jar 的路径
-     */
-    private static String getAndroidSDKPath(Project project) {
-        AppExtension extension = project.getExtensions().findByType(AppExtension.class);
-        if (extension != null) {
-            return extension.getBootClasspath().get(0).getAbsolutePath();
-        }
-        return null;
     }
 
 }

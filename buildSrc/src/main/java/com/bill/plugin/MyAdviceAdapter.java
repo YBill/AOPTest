@@ -25,6 +25,7 @@ public class MyAdviceAdapter extends AdviceAdapter {
     @Override
     protected void onMethodEnter() {
         super.onMethodEnter();
+        System.out.println("==== AdviceAdapter onMethodEnter");
         // 在方法开始处调用
         // 创建一个long类型的本地变量
         startTimeId = newLocal(Type.LONG_TYPE);
@@ -45,6 +46,7 @@ public class MyAdviceAdapter extends AdviceAdapter {
     @Override
     protected void onMethodExit(int opcode) {
         super.onMethodExit(opcode);
+        System.out.println("==== AdviceAdapter onMethodExit");
         // 在方法结束时调用
         // 创建一个long类型的本地变量
         int endTimeId = newLocal(Type.LONG_TYPE);
@@ -95,5 +97,11 @@ public class MyAdviceAdapter extends AdviceAdapter {
 
         /*// 调用System.out的println方法
         mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);*/
+    }
+
+    @Override
+    public void visitMaxs(int maxStack, int maxLocals) {
+        System.out.println("==== AdviceAdapter visitMaxs ---> maxStack = " + maxStack + ", maxLocals = " + maxLocals);
+        super.visitMaxs(maxStack, maxLocals);
     }
 }
